@@ -1,0 +1,12 @@
+data/
+test/
+**/__pycache__/
+test.*
+.idea/
+*.bak
+**/dist/
+**/*.egg-info
+**/*.json
+*.wiki/
+
+!.gitea/

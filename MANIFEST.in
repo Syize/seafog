@@ -1,0 +1,3 @@
+include seafog/res/*.txt
+include seafog/res/*.nc
+include seafog/examples/*.py

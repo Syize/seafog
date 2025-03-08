@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "seafog"
+version = "1.3.28"
+authors = [
+    {name = "Syize", email = "syizeliu@gmail.com"},
+]
+description = "A Python package for marine fog research"
+dependencies = [
+    "numpy", "xarray", "netCDF4", "pgm-reader", "rich", "ephem", "matplotlib",
+    "pandas", "scipy", "pycurl", "global-land-mask", "cartopy"
+]
+
+[tool.poetry]
+readme = "README.md"
