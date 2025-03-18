@@ -8,5 +8,6 @@ test.*
 **/*.egg-info
 **/*.json
 *.wiki/
+doc/build
 
 !.gitea/
