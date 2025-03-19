@@ -14,7 +14,8 @@ from pgm_reader import Reader
 from rich.progress import Progress
 from xarray import DataArray
 
-from .res import get_default_table_file, VIS_table_file
+from .res import *
+from .res import get_default_table_file
 from .utils import decompress_file, download_url, logger
 
 ROOT_URL = "http://weather.is.kochi-u.ac.jp/sat"
@@ -35,7 +36,7 @@ HEADER_CHANGE_2 = datetime(2015, 7, 1, 2)
 MONTH = {'01': 'Jan', '02': 'Feb', '03': 'Mar', '04': 'Apr', '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Aug', '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dec'}
 
 
-def _generate_data_info(date: datetime, header: str, data_type: str, save_path: str) -> Tuple[str, str, str]:
+def generate_data_info(date: datetime, header: str, data_type: str, save_path: str) -> Tuple[str, str, str]:
     """
     generate data filename, download url and save path.
 
@@ -53,7 +54,7 @@ def _generate_data_info(date: datetime, header: str, data_type: str, save_path: 
     return filename, url, save_path
 
 
-def _generate_table_info(date: datetime, header: str, save_path: str) -> Tuple[str, str, str]:
+def generate_table_info(date: datetime, header: str, save_path: str) -> Tuple[str, str, str]:
     """
     generate table filename, download url and save path.
 
@@ -198,10 +199,10 @@ def pgm_find_data(date: str, save_path: str, data_type: Union[str, Iterable[str]
         data_type_list = ['IR1', 'IR4', 'VIS']
     elif data_type == 'all':
         data_type_list = ['IR1', 'IR2', 'IR3', 'IR4', 'VIS']
-    elif isinstance(data_type, Iterable):
-        data_type_list = data_type
-    else:
+    elif isinstance(data_type, str):
         data_type_list = [data_type]
+    else:
+        data_type_list = data_type
     header = get_file_header(date)
 
     # store data path
@@ -211,7 +212,7 @@ def pgm_find_data(date: str, save_path: str, data_type: Union[str, Iterable[str]
 
     # find exist data
     for data_type in data_type_list:
-        filename, file_url, file_path = _generate_data_info(date, header, data_type, save_path)
+        filename, file_url, file_path = generate_data_info(date, header, data_type, save_path)
         if not exists(file_path[:-3]):
             miss_data_info[filename] = file_url
         else:
@@ -243,7 +244,7 @@ def pgm_find_data(date: str, save_path: str, data_type: Union[str, Iterable[str]
     data_path_list.sort()
 
     # find exist table file
-    filename, table_url, table_path = _generate_table_info(date, header, save_path)
+    filename, table_url, table_path = generate_table_info(date, header, save_path)
     # download table file
     if not exists(table_path[:-3]):
         # logger.debug(f"Downloading file from {table_url}")
@@ -267,4 +268,4 @@ def pgm_find_data(date: str, save_path: str, data_type: Union[str, Iterable[str]
     return tuple(data_path_list)
 
 
-__all__ = ['pgm_parser', 'pgm_find_data']
+__all__ = ['pgm_parser', 'pgm_find_data', 'generate_data_info', 'generate_table_info', 'get_file_header']

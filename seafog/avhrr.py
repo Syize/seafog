@@ -21,7 +21,7 @@ def avhrr_find_data(date: str, save_path: str, proxy_host: str = None, proxy_por
     """
     download avhrr daily sst data from the `website <https://coastwatch.pfeg.noaa.gov/erddap/griddap/nceiPH53sstd1day.html>`_.
 
-    :param date: UTC time, for example, "2020-01-01".
+    :param date: UTC time, for example, "2020-01-01 00:00".
     :param save_path: the directory path to store downloaded data.
     :param proxy_host: host address of proxy server.
     :param proxy_port: port number of proxy server.
@@ -35,7 +35,7 @@ def avhrr_find_data(date: str, save_path: str, proxy_host: str = None, proxy_por
 
     download data:
 
-    >>> avhrr_find_data("2020-01-01", "data", show_progress=False) # set show_progress=False will disable the progress bar.
+    >>> avhrr_find_data("2020-01-01 00:00", "data", show_progress=False) # set show_progress=False will disable the progress bar.
     'data/20200101141457-NCEI-L3C_GHRSST-SSTskin-AVHRR_Pathfinder-PFV5.3_NOAA19_G_2020001_day-v02.0-fv01.0.nc'
 
     """
@@ -45,7 +45,7 @@ def avhrr_find_data(date: str, save_path: str, proxy_host: str = None, proxy_por
     if not exists(AVHRR_CACHE_FOLDER):
         makedirs(AVHRR_CACHE_FOLDER)
     # parse date
-    date = datetime.strptime(date, "%Y-%m-%d")
+    date = datetime.strptime(date, "%Y-%m-%d %H:%M")
     # read file lists
     cache_file = f"{AVHRR_CACHE_FOLDER}/{date.year}.json"
     # if not exists, download cache

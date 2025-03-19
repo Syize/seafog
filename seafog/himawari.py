@@ -5,7 +5,7 @@ seafog.himawari provides methods to download Himawari-8/9 data from PTREE and to
 from datetime import datetime
 from os import makedirs
 from os.path import exists
-from typing import Tuple, Callable, Union
+from typing import Callable, Tuple, Union
 
 import numpy as np
 from cartopy import crs
@@ -110,27 +110,53 @@ def plot_himawari_vis(ax: GeoAxes, dataset: Dataset, area_range: Union[Tuple[flo
     ax.pcolormesh(longitude, latitude, vis_rgb, color=vis_color, shading="nearest", transform=crs.PlateCarree())
 
 
-def himawari8_find_data(date: str, save_path: str, resolution: str = "low", area: str = "full", band_num: str = "auto", ftp_setting: dict = None,
-                        progress: Progress = None, show_progress=True, callback: Callable = None, timeout=720) -> str:
+def himawari_find_data(date: str, save_path: str, resolution: str = "low", area: str = "full", band_num: str = "auto", ftp_setting: dict = None, progress_num=1,
+                       progress: Progress = None, show_progress=True, callback: Callable = None, timeout=720, connection_timeout=30, force_download=False) -> str:
     """
-    download himawari-8 satellite data.
-    
+    Download himawari-8/9 data from the official website.
+    This function will search the data in the ``save_path`` first.
+    If the data exists, it will skip the download.
+    You can set `force_download=True` to force to re-download the data.
+
+    :param date: Date string in format "%Y-%m-%d %H:%M".
+    :type date: str
+    :param save_path: The directory to store data.
+    :type save_path: str
+    :param resolution: Himawari data's resolution, valid value: ``["low", "high"]``.
+                       The actual resolution will be different depending on the ``area`` you chose.
+                       You can refer to the `seafog wiki <http://gitea.seafog.syize.cn/seafog/seafog-plot/wiki/himawari8#himawari8_find_data>`_ for more information.
+    :type resolution: str
+    :param area: Himawari data's area, valid value: ``["full", "japan"]``.
+    :type area: str
+    :param band_num: Band numbers in the data, valid value: ``["21", "04", "14", "auto"]``.
+                     The band number will change with the ``area``, ``full`` is ``"21"``, ``japan`` is ``"04"`` or ``"14"``.
+                     If ``band_num == "auto"``, the usable highest number will be used.
+    :type band_num: str
+    :param ftp_setting: A dict contains the following keys: ``["username", "password", "proxy_host", "proxy_port"]``, in which ``["proxy_host", "proxy_port"]`` are optional.
+    :type ftp_setting: dict
+    :param progress_num: The number of processes which will be used to download the data.
+                         Increase this number can help make download speed faster.
+                         It won't be larger than ``cpu_cores – 2``.
+    :type progress_num: int
     :param progress: ``rich.progress.Progress`` object to display progress bar.
-    :param area: data area, valid value, [`full`, `japan`].
-    :param resolution:  resolution, valid value, [`low`, `high`].
-                        it will be different depending on the area you chose,
-                        refer to the `online page <http://gitea.seafog.syize.cn/seafog/seafog-plot/wiki/himawari8#himawari8_find_data>`_ for more information.
-    :param band_num: band number, depending on your area, ``full`` contains ['21'], ``japan`` contains ['04', '14'].
-                     or you can leave it as `auto`, which means the highest resolution.
-    :param date: date string, UTC format, for example, "2015-07-07 00:00".
-    :param save_path: the directory path to store downloaded data.
-    :param ftp_setting: ftp setting dict, for example, ``{"username": "Your Username", "password": "Your Password", "proxy_host": "socks://127.0.0.1", "proxy_port": 1080}``
-    :param show_progress: if True, display download progress in the console.
-    :param callback: callable object that will be called every iteration during data download.
-                     ``callback`` should accept two params, `total_size` and `step_size`
-    :param timeout: the max time which could be used to download file; download will be terminated once the max time is reached;
-                    set it to -1 for no limitation; Unit: seconds.
-    :return: data file path.
+    :type progress: Progress
+    :param show_progress: If True, display download progress in the console.
+    :type show_progress: bool
+    :param callback: Callable object that will be called every iteration during data download.
+                     ``callback`` should accept two params, `total_size` and `step_size`.
+    :type callback: Callable
+    :param timeout: The max time which could be used to download the data.
+                    Download will be terminated once the max time is reached.
+                    Set it to -1 for no limitation.
+                    Units: seconds.
+    :type timeout: int
+    :param connection_timeout: The max time which will be used to connect to the server.
+                               Units: seconds.
+    :type connection_timeout: int
+    :param force_download: If ignore the existing data and re-download it.
+    :type force_download: bool
+    :return: Data file path.
+    :rtype: str
     """
     # for example, NC_H08_20150707_0000_r04_FLDK.05401_05201.nc
     NAME_TEMPLATE = "NC_H{}_{}_{}_{}_FLDK.{}_{}.nc"
@@ -192,8 +218,8 @@ def himawari8_find_data(date: str, save_path: str, resolution: str = "low", area
     satellite_num = "08" if date <= datetime(2022, 12, 12) else "09"
     filename = NAME_TEMPLATE.format(satellite_num, date.strftime("%Y%m%d"), date.strftime("%H%M"), band_num, x_res, y_res)
     data_path = f"{save_path}/{filename}"
-    # check is data exists
-    if exists(data_path):
+    # check the existing data
+    if not force_download and exists(data_path):
         return data_path
 
     url = URL_TEMPLATE.format(date.strftime("%Y%m"), date.strftime("%d")) + filename
@@ -222,10 +248,11 @@ def himawari8_find_data(date: str, save_path: str, resolution: str = "low", area
         raise KeyError
 
     if not download_ftp(url, save_path, filename, user=user, passwd=passwd, proxy_host=proxy_host, proxy_port=proxy_port,
-                        show_progress=show_progress, progress=progress, callback=callback, timeout=timeout):
+                        show_progress=show_progress, progress=progress, callback=callback, timeout=timeout, connection_timeout=connection_timeout,
+                        progress_num=progress_num, force_download=force_download):
         raise ConnectionError
 
     return f"{save_path}/{filename}"
 
 
-__all__ = ['convert_satellite_data', 'up_sampling', 'himawari8_find_data', 'plot_himawari_vis']
+__all__ = ['convert_satellite_data', 'up_sampling', 'himawari_find_data', 'plot_himawari_vis']
