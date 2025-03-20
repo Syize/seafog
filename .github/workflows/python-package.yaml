@@ -1,5 +1,5 @@
 name: Build and Upload Python Package
-run-name: Building and uploading wrfrun Python package
+run-name: Building and uploading seafog Python package
 on:
   release:
     types: [published]
