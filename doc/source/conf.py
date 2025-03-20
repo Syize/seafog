@@ -9,7 +9,7 @@
 project = 'seafog'
 copyright = '2024, Syize'
 author = 'Syize'
-release = '1.3.28'
+release = '1.3.36'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

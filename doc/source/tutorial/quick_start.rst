@@ -79,18 +79,19 @@ As you can see, all of these data are shipped in ``PGM`` or ``TXT`` format, whic
         :caption: sst
 
         <xarray.DataArray 'sst' (latitude: 720, longitude: 1440)> Size: 8MB
-        array([[ nan,  nan,  nan, ...,  nan,  nan,  nan],
-               [ nan,  nan,  nan, ...,  nan,  nan,  nan],
-               [ nan,  nan,  nan, ...,  nan,  nan,  nan],
+        array([[   nan,    nan,    nan, ...,    nan,    nan,    nan],
+               [   nan,    nan,    nan, ...,    nan,    nan,    nan],
+               [   nan,    nan,    nan, ...,    nan,    nan,    nan],
                ...,
-               [-1.8, -1.8, -1.8, ..., -1.8, -1.8, -1.8],
-               [-1.8, -1.8, -1.8, ..., -1.8, -1.8, -1.8],
-               [-1.8, -1.8, -1.8, ..., -1.8, -1.8, -1.8]])
+               [271.35, 271.35, 271.35, ..., 271.35, 271.35, 271.35],
+               [271.35, 271.35, 271.35, ..., 271.35, 271.35, 271.35],
+               [271.35, 271.35, 271.35, ..., 271.35, 271.35, 271.35]])
         Coordinates:
           * latitude   (latitude) float64 6kB -89.88 -89.62 -89.38 ... 89.38 89.62 89.88
           * longitude  (longitude) float64 12kB 0.125 0.375 0.625 ... 359.4 359.6 359.9
         Attributes:
-            units:    degree
+            units:      K
+            long_name:  Sea surface temperature
 
 Detect seafog
 *************
@@ -98,25 +99,25 @@ Detect seafog
 Interpolate and mask data
 =========================
 
-Because the resolution of satellite data and SST is different, we need to interpolate them to the same resolution at first. ``NaN`` values in SST will be removed because they can affect the interpolation, so we have to mask land values after interpolating. ``seafog`` has a built in landmask data ``LANDMASK_file`` which resolution is around 4-km, we can interpolate the data to the same resolution as ``LANDMASK_file`` conveniently.
+Because the resolution of satellite data and SST is different, we need to interpolate them to the same resolution at first. ``NaN`` values in SST will be removed because they can affect the interpolation, so we have to mask land values after interpolating. Let's interpolate the data to a resolution of 0.0416°, which is around 4-km.
 
 .. code-block:: Python
     :caption: main.py
 
-    from seafog import LANDMASK_file, mask_land
-    from xarray import open_dataset
+    import numpy as np
+    from seafog import mask_land
 
     # set nan in sst to -10
-    sst = sst.fillna(-10)
-    landmask = open_dataset(LANDMASK_file)['landmask']
-    landmask = landmask.loc[30:42, 115:130]
+    sst = sst.fillna(263.16)
+    latitude = np.arange(30, 42, 0.0416)
+    longitude = np.arange(115, 130, 0.0416)
     # interpolate and mask data
-    IR1 = IR1.interp(coords={'latitude': landmask['latitude'], 'longitude': landmask['longitude']})
-    IR4 = IR4.interp(coords={'latitude': landmask['latitude'], 'longitude': landmask['longitude']})
-    VIS = VIS.interp(coords={'latitude': landmask['latitude'], 'longitude': landmask['longitude']})
-    sst = sst.interp(coords={'latitude': landmask['latitude'], 'longitude': landmask['longitude']})
+    IR1 = IR1.interp(coords={'latitude': latitude, 'longitude': longitude})
+    IR4 = IR4.interp(coords={'latitude': latitude, 'longitude': longitude})
+    VIS = VIS.interp(coords={'latitude': latitude, 'longitude': longitude})
+    sst = sst.interp(coords={'latitude': latitude, 'longitude': longitude})
     # mask sst value on land
-    sst = mask_land(sst, landmask)
+    sst = mask_land(sst)
 
     print(IR4)
     print(sst)
@@ -151,30 +152,31 @@ Because the resolution of satellite data and SST is different, we need to interp
     .. code-block::
         :caption: sst
 
-        <xarray.DataArray 'sst' (latitude: 288, longitude: 360)> Size: 829kB
-        array([[         nan,          nan,          nan, ...,  21.92222205,
-                 21.94444431,  21.96666658],
-               [-10.        , -10.        , -10.        , ...,  22.03611101,
-                 22.02222216,  22.00833331],
-               [-10.        , -10.        , -10.        , ...,  22.14999996,
-                 22.10000001,  22.05000005],
+        <xarray.DataArray 'sst' (latitude: 289, longitude: 361)> Size: 835kB
+        array([[         nan,          nan,          nan, ..., 294.92492   ,
+                294.98316   , 295.0414    ],
+               [         nan,          nan,          nan, ..., 295.05927802,
+                295.08152237, 295.10376672],
+               [         nan,          nan,          nan, ..., 295.19363603,
+                295.17988474, 295.16613344],
                ...,
                [         nan,          nan,          nan, ...,          nan,
-                  2.24444594,   2.74166758],
+                275.90174463, 276.23177174],
                [         nan,          nan,          nan, ...,          nan,
-                         nan,   1.58333355],
+                         nan, 274.86701885],
                [         nan,          nan,          nan, ...,          nan,
-                         nan,   0.42499952]])
+                         nan,          nan]])
         Coordinates:
-          * latitude   (latitude) float64 2kB 30.04 30.08 30.12 ... 41.92 41.96 42.0
-          * longitude  (longitude) float64 3kB 115.0 115.1 115.1 ... 129.9 130.0 130.0
+          * latitude   (latitude) float64 2kB 30.0 30.04 30.08 ... 41.9 41.94 41.98
+          * longitude  (longitude) float64 3kB 115.0 115.0 115.1 ... 129.9 129.9 130.0
         Attributes:
-            units:    degree
+            units:      K
+            long_name:  Sea surface temperature
 
 Calculate marine fog area and the height of fog top
 ===================================================
 
-We will use ``detect_seafog.daytime_seafog`` to calculate marine fog area at daytime.
+We will use ``detect_seafog.daytime_seafog`` to calculate marine fog area and the height of its top at daytime.
 
 .. code-block:: Python
     :caption: main.py
@@ -183,16 +185,17 @@ We will use ``detect_seafog.daytime_seafog`` to calculate marine fog area at day
     from cartopy import crs
     from seafog import detect_seafog
 
-    # set a proper threshold value
-    detect_seafog.IR_sst_diff_range = (0, 30)
-    seafog = detect_seafog.daytime_seafog(IR4, sst)
+    detect_seafog.IR_sst_diff_range = (0, 35)
+    seafog = detect_seafog.daytime_seafog(fog_date, IR1, IR4, VIS, sst)
 
     fig = plt.figure(figsize=(10, 10))
-    proj = crs.PlateCarree(central_longitude=180)
-    ax = fig.add_subplot(111, projection=proj)
-    ax.pcolormesh(seafog['longitude'], seafog['latitude'], seafog, transform=proj)
+    proj = crs.PlateCarree()
+    ax = fig.add_subplot(111, projection=crs.PlateCarree(central_longitude=180))
+    im = ax.contourf(seafog['longitude'], seafog['latitude'], seafog, levels=np.arange(0, 300, 30), transform=proj)
     ax.coastlines()
     ax.set_title(f"seafog at {fog_date}", loc='left')
+    cbar = fig.colorbar(mappable=im)
+    cbar.set_label("Height of fog top (m)")
     plt.show()
 
 .. image:: quick_start/fog_area.png
