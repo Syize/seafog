@@ -5,7 +5,6 @@ This Python file contains some utility functions for the project.
 import gzip
 import logging
 import sys
-import warnings
 from datetime import datetime
 from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
@@ -26,7 +25,7 @@ from rich.logging import RichHandler
 from rich.progress import BarColumn, DownloadColumn, Progress, TextColumn, TimeRemainingColumn, TransferSpeedColumn
 
 # close numpy RuntimeWarning
-warnings.filterwarnings("ignore")
+# warnings.filterwarnings("ignore")
 
 # init a logger
 logger = logging.getLogger("seafog")
@@ -35,7 +34,7 @@ formatter = logging.Formatter("%(name)s :: %(message)s", datefmt="%m-%d %H:%M:%S
 handler = RichHandler()
 handler.setFormatter(formatter)
 logger.addHandler(handler)
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.INFO)
 # remove handler in pgm reader and set handler
 _logger = logging.getLogger("pgm reader")
 for _handler in _logger.handlers:

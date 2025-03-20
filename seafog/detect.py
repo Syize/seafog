@@ -8,7 +8,7 @@ from typing import Union, Tuple, List
 import numpy as np
 from xarray import DataArray, Dataset
 
-from .utils import solar_altitude_zenith, logger, seafog_top_height
+from .utils import atmosphere_visibility, solar_altitude_zenith, logger, seafog_top_height
 
 
 def remove_single_point(data: np.ndarray) -> np.ndarray:
@@ -48,7 +48,6 @@ class Seafog:
         self._diff_range_night_IR: Tuple[float, float] = (-5.5, -3.5)
         self._diff_range_daytime_IR: Tuple[float, float, float] = (-2, 3, 45)
         self._beta: float = 0.0685
-        self._ir_sst_diff_range: Tuple[float, float] = (-5, 10)
         # threshold value of QCLOUD
         self._qcloud_threshold = 0.02
         # datas which are higher than 500m will be removed
@@ -103,21 +102,6 @@ class Seafog:
     def beta(self, value: float):
         assert isinstance(value, float), "Only float value will be accepted"
         self._beta = value
-
-    @property
-    def IR_sst_diff_range(self) -> Tuple[float, float]:
-        """
-        the value range of ``IR4 - SST``.
-
-        :return: (min_value, max_value).
-        """
-        return self._ir_sst_diff_range
-
-    @IR_sst_diff_range.setter
-    def IR_sst_diff_range(self, value: Tuple[float, float]):
-        assert isinstance(value, tuple), "Only float value will be accepted"
-        assert len(value) == 2, f"Only two values will be accepted, but got{value}"
-        self._ir_sst_diff_range = value
 
     @property
     def QCLOUD_threshold(self) -> float:
@@ -274,46 +258,87 @@ class Seafog:
             "description": f"height of seafog's top and area of seafog bottom from WRF, calculated by package seafog at {create_time}"
         })
 
-    def seafog_top_daily(self, VIS: np.ndarray, zenith_cosine: np.ndarray) -> np.ndarray:
-        """
-        calculate the top height of seafog in the daytime.
-
-        :param VIS: VIS band data.
-        :param zenith_cosine: cosine value of the solar zenith angle.
-        :return:
-        """
-        return -45.6 + 84.3 * np.power(VIS / 100 * zenith_cosine / ((1 - VIS / 100) * self._beta), 0.5)
-
-    def daytime_seafog(self, date: str, IR4: DataArray, VIS: DataArray, sst: DataArray) -> DataArray:
+    def daytime_seafog(self, date: str, IR1: DataArray, IR4: DataArray, VIS: DataArray, sst: DataArray) -> DataArray:
         """
         Detect seafog based on the difference between IR4 and sst data.
 
         :param date: Date of the data in format ``%Y-%m-%d %H:%M``, UTC.
+        :param IR1: IR1 band data.
         :param IR4: IR4 band data.
         :param VIS: Brightness temperature of the VIS band.
         :param sst: SST data.
         :return: Height of the marine fog top.
         """
         # check data dimensions
-        assert (IR4.shape[0] == VIS.shape[0] == sst.shape[0]), "The shape of IR4 and SST data must be the same"
-        assert (IR4.shape[1] == VIS.shape[1] == sst.shape[1]), "The shape of IR4 and SST data must be the same"
+        assert (IR1.shape == IR4.shape == VIS.shape == sst.shape), "The shape of IR1, IR4, VIS and SST data must be the same"
 
-        # detect fog
-        IR_diff = IR4.to_numpy() - sst.to_numpy() - 4.0
-        index = np.logical_and(IR_diff >= self._ir_sst_diff_range[0], IR_diff <= self._ir_sst_diff_range[1])
-        IR_diff[~index] = np.nan
-        index = np.isnan(IR_diff)
+        sst = sst.to_numpy()
 
-        # calculate fog top height
-        fog_top_height = VIS.to_numpy()
-        fog_top_height[index] = np.nan
-        longitude = VIS['longitude'].to_numpy()
-        latitude = VIS['latitude'].to_numpy()
+        # check the unit of SST
+        if np.nanmin(sst) < 100:
+            logger.info(f"Convert the unit of SST to Kelvin")
+            sst = sst + 273.16
+
+        # calculate solar altitude and zenith angle
+        longitude = IR1['longitude'].to_numpy()
+        latitude = IR1['latitude'].to_numpy()
         longitude, latitude = np.meshgrid(longitude, latitude)
-        _, solar_zenith = solar_altitude_zenith(date, longitude, latitude)
-        fog_top_height = seafog_top_height(fog_top_height, solar_zenith, self._beta)
+        solar_altitude, solar_zenith = solar_altitude_zenith(date, longitude, latitude)
 
-        return DataArray(name="seafog", data=fog_top_height, dims=VIS.dims, coords=VIS.coords, attrs={
+        # create an empty array to store fog top height, with nan means there is no fog
+        seafog = np.full(IR1.shape, np.nan)
+
+        # ISTD is less than 4 means there is no fog
+        IR_diff = IR4.to_numpy() - sst
+        index_IR = np.logical_or(IR_diff < 4, np.isnan(sst))
+
+        diff_IR4_IR1 = IR4.to_numpy() - IR1.to_numpy()
+        VIS = VIS.to_numpy()
+
+        if VIS.max() <= 1:
+            logger.warning(
+                f"Your VIS data is in decimal form and will be multiplied by 100 to be presented in fractional form. "
+                f"If you believe this reminder is in error, please double-check your VIS data."
+            )
+            VIS = VIS * 100
+
+        # calculate atmospheric visibility and the height of fog or cloud's top
+        visibility = atmosphere_visibility(VIS, solar_zenith)
+        height = seafog_top_height(VIS, solar_zenith, self._beta)
+
+        # only when visibility is less than 1km and the height is between 0m and 600m, can it maybe a seafog
+        index = np.logical_and(height > 0, height < self._maximum_height) & (visibility <= 1000)
+        height[~index] = np.nan
+
+        # find out which point's zenith angle is less than 10 degree or larger than degree 80
+        index_zenith = np.logical_or(solar_zenith <= 10, solar_zenith >= 80)
+        # find out which point's diff_IR4_IR1 is larger than -2 and less than 3
+        index_diff = np.logical_and(
+            diff_IR4_IR1 > self._diff_range_daytime_IR[0],
+            diff_IR4_IR1 <= self._diff_range_daytime_IR[1]
+        )
+
+        index = index_zenith & index_diff
+        seafog[index] = height[index]
+
+        # find out which point's zenith angle is larger than 10 and less than 80
+        index_zenith = np.logical_and(solar_zenith >= 10, solar_zenith <= 80)
+        # find out which point's diff_IR4_IR1 is larger than 3 and less than 45
+        index_diff = np.logical_and(
+            diff_IR4_IR1 > self._diff_range_daytime_IR[1],
+            diff_IR4_IR1 <= self._diff_range_daytime_IR[2]
+        )
+
+        index = index_zenith & index_diff
+        seafog[index] = height[index]
+
+        # re-mask invalid value
+        seafog[index_IR] = np.nan
+
+        # remove single point
+        seafog = remove_single_point(seafog)
+
+        return DataArray(name="seafog", data=seafog, dims=IR1.dims, coords=IR1.coords, attrs={
             "units": "m",
             'long_name': "height of seafog's top",
             'standard_name': 'seafog',
@@ -349,8 +374,8 @@ class Seafog:
         # diff IR4 and IR1 to take out seafog
         diff_IR4_IR1 = IR4.to_numpy() - IR1.to_numpy()
 
-        index = np.logical_and(diff_IR4_IR1 > self.diff_range_night_IR[0],
-                               diff_IR4_IR1 < self.diff_range_night_IR[1])
+        index = np.logical_and(diff_IR4_IR1 > self._diff_range_night_IR[0],
+                               diff_IR4_IR1 < self._diff_range_night_IR[1])
         seafog[index] = 100 * (-2.12 + 1.91 * np.abs(diff_IR4_IR1[index]) / 2)
 
         # the height of seafog should less than 600
