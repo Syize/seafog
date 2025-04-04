@@ -60,6 +60,28 @@ HEADERS = {
 }
 
 
+def _generate_displayed_filename(filename: str, max_length=32) -> str:
+    """
+    Process the filename so we can display it in the process bar.
+
+    >>> _generate_displayed_filename("NC_H08_20210325_0000_R21_FLDK.02401_02401.nc")
+    'NC_H08_2021032....02401_02401.nc'
+
+    :param filename: Original filename.
+    :type filename: str
+    :param max_length: Maximum length of the processed filename.
+    :type max_length: int
+    :return: Processed filename.
+    :rtype: str
+    """
+    if len(filename) <= max_length:
+        return filename
+
+    else:
+        margin_length = (max_length - 4) // 2
+        return f"{filename[:margin_length]}....{filename[-margin_length:]}"
+
+
 def _multi_process_env_check() -> bool:
     """
     On Windows and macOS, we need something like ``if __name__ == "__main__"`` to avoid the RuntimeError.
@@ -143,8 +165,9 @@ class CurlSingleProcessCallback:
 
         # Check task id. If it's None, create a new task
         if self.task_id is None and isinstance(self.progress, Progress):
+            filename = _generate_displayed_filename(self.filename)
             # create a task
-            self.task_id = self.progress.add_task(f"[red]{self.filename}[red]", total=download_total)
+            self.task_id = self.progress.add_task(f"[red]{filename}[red]", total=download_total)
             # set start size
             self.progress.update(self.task_id, advance=self.start_size)
             # update progress
@@ -437,7 +460,8 @@ class CurlDownloader:
             file_size = int(curl.getinfo(pycurl.CONTENT_LENGTH_DOWNLOAD))
 
             if isinstance(progress, Progress):
-                pid = progress.add_task(f"[red]{self.filename}[red]", total=file_size)
+                filename = _generate_displayed_filename(self.filename)
+                pid = progress.add_task(f"[red]{filename}[red]", total=file_size)
             else:
                 pid = None
 
@@ -795,7 +819,8 @@ def _download_url(
                 if size is None:
                     size = 1000
                 if progress is not None:
-                    task_id = progress.add_task(f"[red]{filename}[red]", total=int(size))
+
+                    task_id = progress.add_task(f"[red]{_generate_displayed_filename(filename)}[red]", total=int(size))
                 # save data to a temp file in case download is terminated
                 temp_filename = f"{filename}.part"
                 with open(save_path + temp_filename, 'wb') as f:
